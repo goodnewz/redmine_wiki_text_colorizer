@@ -99,6 +99,28 @@ For details, refer to [this link](https://www.redmine.org/projects/redmine/repos
 Change the following: `:filter_html => true,` -> `:filter_html => false,`  
 For details, refer to [this link](https://www.redmine.org/projects/redmine/repository/svn/revisions/22755/entry/branches/5.1-stable/lib/redmine/wiki_formatting/markdown/formatter.rb#L91).
 
+## Editor interaction fixes
+
+The color buttons open a palette on hover, click, keyboard activation, or touch. Click or press Enter/Space on a swatch to apply it, including the initial or last-used color. Escape or a click outside the palette cancels without changing the text. Closing a palette disposes of its Spectrum instance and document/window event handlers. Dynamically added jsToolBar editors use the same delegated initialization.
+
+This integration retains Redmine's existing sanitizer. CommonMark renders the generated color and background-color spans without changes to Redmine core. Textile CSS output remains controlled by the existing plugin setting.
+
+### Browser regression checks
+
+Use an isolated Redmine instance with this plugin installed, CommonMark formatting enabled, and an existing project with wiki and issue tracking enabled. The script saves the project's Wiki page, requests previews, and edits an unsaved issue form; use a disposable instance.
+
+```bash
+python3 -m pip install playwright
+python3 -m playwright install chromium
+export REDMINE_URL=http://127.0.0.1:3000
+export REDMINE_PROJECT=colorizer-test
+export REDMINE_USERNAME=admin
+export REDMINE_PASSWORD='<local fixture password>'
+python3 test/browser_colorizer.py
+```
+
+Optional `CHROMIUM_PATH` selects an existing Chromium executable; `SCREENSHOT_DIR` saves desktop and mobile screenshots. Checks cover keyboard and touch activation, repeated/default color choices, selection/caret handling, cancellation, global handler cleanup, dynamically created toolbars, AJAX previews, saved wiki rendering, issue descriptions, and preservation of Redmine's HTML sanitization.
+
 ## Libraries in use
 ### Spectrum v2.0.10
 This plugin utilizes the Spectrum library (https://github.com/seballot/spectrum)
