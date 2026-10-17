@@ -21,10 +21,10 @@
       type: "text_color_button",
       title: resources.text.textColor,
       fn: {
-        wiki: function () {
+        wiki: function (event) {
+          event.stopPropagation();
           const jstbButton = $(this.toolbar).find(".jstb_text_color")[0];
-          formatTextColor(jstbButton, null);
-          $(jstbButton).spectrum("destroy");
+          showColorPicker(jstbButton, true);
         },
       },
     };
@@ -33,10 +33,10 @@
       type: "text_color_button",
       title: resources.text.textBGColor,
       fn: {
-        wiki: function () {
+        wiki: function (event) {
+          event.stopPropagation();
           const jstbButton = $(this.toolbar).find(".jstb_text_bgcolor")[0];
-          formatTextColor(jstbButton, null, true);
-          $(jstbButton).spectrum("destroy");
+          showColorPicker(jstbButton, true);
         },
       },
     };
@@ -80,10 +80,6 @@
    * @param {*} value
    */
   function applyStyle(jstbButton, key, value) {
-    if (value === null) {
-      value = $(jstbButton).spectrum("get");
-    }
-
     const $textArea = $(jstbButton)
       .closest(".jstBlock")
       .find(".jstEditor > textarea");
@@ -125,9 +121,7 @@
    * @param {*} color
    */
   function formatTextColor(jstbButton, color, background = false) {
-    if (color === null) {
-      color = $(jstbButton).spectrum("get");
-    }
+    if (!color) return;
 
     const colorString = color.toName() || color.toHexString();
 
@@ -154,56 +148,62 @@
     }
   }
 
-  $(() => {
-    // Add empty style tags
-    $("head")
-      .append($("<style/>").addClass("jstb_text_color"))
-      .append($("<style/>").addClass("jstb_text_bgcolor"));
-
-    // Event settings
-    $(document)
-      .on("mouseover", ".jstb_text_color, .jstb_text_bgcolor", function () {
-        const color =
-          $(this).data("color") ||
-          $(this).val() ||
-          ($(this).hasClass("jstb_text_bgcolor") ? "white" : "black");
-        // TODO:
-        //   `$(this).val()` is overwritten at an unintended time from
-        //   spectrum.js.
-
-        // When the mouse over the button, generate the palette.
-        $(this)
-          .spectrum({
-            color: color,
-            clickoutFiresChange: false,
-            togglePaletteOnly: true,
-            showPaletteOnly: true,
-            togglePaletteMoreText: resources.text.togglePaletteMoreText,
-            togglePaletteLessText: resources.text.togglePaletteLessText,
-            hideAfterPaletteSelect: true,
-            showAlpha: false,
-            showInput: true,
-            localStorageKey: "wiki-text-colorizer-spectrum-selection-palette",
-            change: function (color) {
-              formatTextColor(
-                this,
-                color,
-                $(this).hasClass("jstb_text_bgcolor")
-              );
-            },
-          })
-          .spectrum("show");
-      })
-      .on("mouseleave", ".jstb_text_color, .jstb_text_bgcolor", function () {
-        // If the mouse leaves the button and the focus is somewhere other than
-        // the palette, remove the palette.
-        if (!$("div.sp-container:hover").length > 0) {
-          $(this).spectrum("destroy");
-        }
-      })
-      .on("mouseleave", ".sp-container", function () {
-        // When the mouse leaves the palette, remove the palette.
-        $(this).remove();
+  /** Keep Spectrum alive until it hides so its document handlers are removed. */
+  function showColorPicker(button, focusPalette = false) {
+    const $button = $(button);
+    if ($button.data("spectrum.id") === undefined) {
+      let applyOnHide = false;
+      $button.spectrum({
+        color: $button.data("color") ||
+          ($button.hasClass("jstb_text_bgcolor") ? "white" : "black"),
+        allowEmpty: false,
+        clickoutFiresChange: false,
+        togglePaletteOnly: true,
+        showPaletteOnly: true,
+        togglePaletteMoreText: resources.text.togglePaletteMoreText,
+        togglePaletteLessText: resources.text.togglePaletteLessText,
+        hideAfterPaletteSelect: true,
+        showAlpha: false,
+        showInput: true,
+        localStorageKey: "wiki-text-colorizer-spectrum-selection-palette",
+        change: function () {
+          applyOnHide = true;
+        },
+        hide: function (color) {
+          const restoreFocus = $palette[0].contains(document.activeElement);
+          if (applyOnHide) {
+            formatTextColor(this, color, $(this).hasClass("jstb_text_bgcolor"));
+          }
+          // Spectrum.hide unbinds document/window events before this callback.
+          $(this).spectrum("destroy").attr("aria-expanded", "false");
+          if (restoreFocus && !applyOnHide) this.focus();
+        },
       });
+      $button.attr("aria-haspopup", "dialog");
+      const $palette = $button.spectrum("container");
+      $palette.attr({role: "dialog", "aria-label": $button.attr("title")});
+      // Choosing the initial/remembered color does not emit Spectrum's change.
+      $palette[0].addEventListener("click", function (event) {
+        if (event.target.closest(".sp-thumb-el")) applyOnHide = true;
+      }, true);
+      // Spectrum's bundled keyboard handler targets divs, but swatches are spans.
+      $palette.on("keydown", ".sp-thumb-el", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          this.click();
+        }
+      });
+    }
+    $button.spectrum("show").attr("aria-expanded", "true");
+    if (focusPalette) {
+      $button.spectrum("container").find(".sp-thumb-el").first().trigger("focus");
+    }
+  }
+
+  $(() => {
+    // Delegation also supports toolbars added by AJAX after the page loads.
+    $(document).on("mouseenter", ".jstb_text_color, .jstb_text_bgcolor", function () {
+      showColorPicker(this);
+    });
   });
 })();
